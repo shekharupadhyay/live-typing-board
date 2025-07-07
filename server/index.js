@@ -10,7 +10,7 @@ app.use(cors());
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: 'http://localhost:3000',
+    origin: '*', // allow all origins; you can restrict to 'https://live-typing-board.vercel.app'
     methods: ['GET', 'POST']
   }
 });
@@ -21,13 +21,11 @@ const roomOwners = {};       // roomId → creator socketId
 const roomUsers = {};        // roomId → array of { socketId, username }
 const socketToRoom = {};     // socketId → roomId
 
-// Utility: Broadcast updated user list to all in a room
 function broadcastUserList(roomId) {
   const users = roomUsers[roomId]?.map(u => u.username) || [];
   io.to(roomId).emit('user_list', users);
 }
 
-// Utility: Clean up empty rooms
 function tryDeleteRoomIfEmpty(roomId) {
   const isEmpty = !roomUsers[roomId] || roomUsers[roomId].length === 0;
   if (isEmpty) {
@@ -41,9 +39,8 @@ function tryDeleteRoomIfEmpty(roomId) {
 io.on('connection', (socket) => {
   console.log(`🟢 Connected: ${socket.id}`);
 
-  // Create Room
   socket.on('create_room', (callback) => {
-    const roomId = uuidv4().slice(0, 6); // e.g. 'a1b2c3'
+    const roomId = uuidv4().slice(0, 6);
     socket.join(roomId);
     roomText[roomId] = '';
     roomOwners[roomId] = socket.id;
@@ -52,7 +49,6 @@ io.on('connection', (socket) => {
     callback(roomId);
   });
 
-  // Join Room
   socket.on('join_room', ({ roomId, username }, callback) => {
     if (roomText[roomId] !== undefined) {
       socket.join(roomId);
@@ -65,7 +61,6 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Typing handler
   socket.on('send_text', ({ roomId, text }) => {
     if (roomText[roomId] !== undefined) {
       roomText[roomId] = text;
@@ -73,7 +68,6 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Leave Room
   socket.on('leave_room', (roomId) => {
     socket.leave(roomId);
     delete socketToRoom[socket.id];
@@ -85,7 +79,6 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Delete Room (creator only)
   socket.on('delete_room', (roomId) => {
     if (roomOwners[roomId] === socket.id) {
       io.to(roomId).emit('room_deleted');
@@ -108,7 +101,6 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Handle disconnect
   socket.on('disconnect', () => {
     const roomId = socketToRoom[socket.id];
     delete socketToRoom[socket.id];
@@ -123,6 +115,8 @@ io.on('connection', (socket) => {
   });
 });
 
-server.listen(4000, () => {
-  console.log('🚀 Server running on http://localhost:4000');
+// ✅ Use dynamic port for Render
+const PORT = process.env.PORT || 4000;
+server.listen(PORT, () => {
+  console.log(`🚀 Server running on port ${PORT}`);
 });
